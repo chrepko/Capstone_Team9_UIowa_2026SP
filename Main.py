@@ -1,4 +1,6 @@
 import RPi.GPIO as GPIO
+import time
+import sys 
 
 class MotorInterface:
     currentValues = [0, 0]
@@ -20,32 +22,35 @@ class MotorInterface:
             else:
                 self.currentdirection = -1
 
-    def switchChannel1(self):
-        self.currentValues[0] += 1
-        if(self.currentValues[0] > 1): 
-            self.currentValues[0] = 0
-        self.TestDirection(1)
+    def switchChannel1(self, channel):
+        state = GPIO.input(channel)
+        if(state):
+            self.channel1Rise()
+        else:
+            self.channel1Fall()
             
-    def switchChannel2(self):
-        self.currentValues[1] += 1
-        if(self.currentValues[1] > 1): 
-            self.currentValues[1] = 0
-        self.TestDirection(2)
+    def switchChannel2(self, channel):
+        state = GPIO.input(channel)
+        if(state):
+            self.channel2Rise()
+        else:
+            self.channel2Fall()
+        
         
     def channel1Rise(self):
-        seld.currentValues[0] = 1
+        self.currentValues[0] = 1
         self.TestDirection(1)
         
     def channel2Rise(self):
-        seld.currentValues[1] = 1
+        self.currentValues[1] = 1
         self.TestDirection(2)
     
     def channel1Fall(self):
-        seld.currentValues[0] = 0
+        self.currentValues[0] = 0
         self.TestDirection(1)
     
     def channel2Fall(self):
-        seld.currentValues[1] = 0
+        self.currentValues[1] = 0
         self.TestDirection(2)
 
     def printDirection(self):
@@ -61,7 +66,18 @@ class DeskInterface:
     motorR = MotorInterface()
     manualMode = True
     movementDirection = 0; # 1 -> up, 0 -> still, -1 -> down
+    
+    def button_trigger(self, channel):
+        state = GPIO.input(channel)
+        print("Trigger on channel " + str(channel))
+        if(not state):
+            self.button_pressed(channel)
+        else:
+            self.button_released(channel)
+            
     def button_pressed(self, channel):
+        print("manual mode: " + str(self.manualMode))
+        print("Movement direction: " + str(self.movementDirection))
         if(channel == UP_GPIO and self.manualMode and self.movementDirection == 0):
             self.startMoveUp()
         elif(channel == DOWN_GPIO and self.manualMode and self.movementDirection == 0):
@@ -72,85 +88,84 @@ class DeskInterface:
                 self.stopMoving()
                 
     def button_released(self, channel):
-        if(channel == UP_GPIO and self.manualMode):
+        if(channel == UP_GPIO and self.manualMode and self.movementDirection == 1):
             self.stopMoving()
-        elif(channel == DOWN_GPIO and self.manualMode):
+        elif(channel == DOWN_GPIO and self.manualMode and self.movementDirection == -1):
             self.stopMoving()
         elif(channel == MODE_GPIO):
             pass
             
     def startMoveUp(self):
-        selfmovementDirection = 1
-        GPIO.output(CONTROL_UP_GPIO, True)
-        GPIO.output(CONTROL_DOWN_GPIO, False)
-        
+        self.movementDirection = 1
+        if(len(sys.argv) == 1):
+            GPIO.output(CONTROL_UP_GPIO, True)
+            GPIO.output(CONTROL_DOWN_GPIO, False)
+        else: 
+            GPIO.output(CONTROL_UP_GPIO, False)
+            GPIO.output(CONTROL_DOWN_GPIO, True)
     def startMoveDown(self):
         self.movementDirection = -1
-        GPIO.output(CONTROL_UP_GPIO, False)
-        GPIO.output(CONTROL_DOWN_GPIO, True)
+        if(len(sys.argv) == 1):
+            GPIO.output(CONTROL_UP_GPIO, False)
+            GPIO.output(CONTROL_DOWN_GPIO, True)
+        else:
+            GPIO.output(CONTROL_UP_GPIO, True)
+            GPIO.output(CONTROL_DOWN_GPIO, False)
         
     def stopMoving(self):
         self.movementDirection = 0
-        GPIO.output(CONTROL_UP_GPIO, False)
-        GPIO.output(CONTROL_DOWN_GPIO, False)
+        if(len(sys.argv) == 1):
+            GPIO.output(CONTROL_UP_GPIO, False)
+            GPIO.output(CONTROL_DOWN_GPIO, False)
+        else:
+            GPIO.output(CONTROL_UP_GPIO, True)
+            GPIO.output(CONTROL_DOWN_GPIO, True)
         
 
 UP_GPIO = 1
-DOWN_GPIO = 2
-MODE_GPIO = 3
-MOTOR_1_SENSOR_1_GPIO = 4
-MOTOR_1_SENSOR_2_GPIO = 5
-MOTOR_2_SENSOR_1_GPIO = 6
-MOTOR_2_SENSOR_2_GPIO = 7
+DOWN_GPIO = 17
+MODE_GPIO = 27
+MOTOR_1_SENSOR_1_GPIO = 10
+MOTOR_1_SENSOR_2_GPIO = 11
+MOTOR_2_SENSOR_1_GPIO = 12
+MOTOR_2_SENSOR_2_GPIO = 13
 
-CONTROL_UP_GPIO = 8
-CONTROL_DOWN_GPIO = 9
+CONTROL_UP_GPIO = 5
+CONTROL_DOWN_GPIO = 6
 
 if __name__ == "__main__":
     interface = DeskInterface()
     GPIO.setmode(GPIO.BCM)
-    GPIO.add_event_detect(UP_GPIO, GPIO.FALLING, 
-        callback=interface.button_released, bouncetime=10)
-    GPIO.add_event_detect(UP_GPIO, GPIO.RISING, 
-        callback=interface.button_pressed, bouncetime=10)
+    GPIO.setup(UP_GPIO, GPIO.IN)
+    GPIO.setup(DOWN_GPIO, GPIO.IN)
+    GPIO.setup(MODE_GPIO, GPIO.IN)
+    GPIO.setup(MOTOR_1_SENSOR_1_GPIO, GPIO.IN)
+    GPIO.setup(MOTOR_1_SENSOR_2_GPIO, GPIO.IN)
+    GPIO.setup(MOTOR_2_SENSOR_1_GPIO, GPIO.IN)
+    GPIO.setup(MOTOR_2_SENSOR_2_GPIO, GPIO.IN)
+    GPIO.setup(CONTROL_UP_GPIO, GPIO.OUT)
+    GPIO.setup(CONTROL_DOWN_GPIO, GPIO.OUT)
     
-    GPIO.add_event_detect(DOWN_GPIO, GPIO.FALLING, 
-        callback=interface.button_released, bouncetime=10)
-    GPIO.add_event_detect(DOWN_GPIO, GPIO.RISING, 
-        callback=interface.button_pressed, bouncetime=10)
+    GPIO.add_event_detect(UP_GPIO, GPIO.BOTH, 
+        callback=interface.button_trigger, bouncetime=10)
     
-    GPIO.add_event_detect(MODE_GPIO, GPIO.FALLING, 
-        callback=interface.button_released, bouncetime=10)
-    GPIO.add_event_detect(MODE_GPIO, GPIO.RISING, 
-        callback=interface.button_pressed, bouncetime=10)
+    GPIO.add_event_detect(DOWN_GPIO, GPIO.BOTH, 
+        callback=interface.button_trigger, bouncetime=10)
+    
+    GPIO.add_event_detect(MODE_GPIO, GPIO.BOTH, 
+        callback=interface.button_trigger, bouncetime=10)
         
-    GPIO.add_event_detect(MOTOR_1_SENSOR_1_GPIO, GPIO.FALLING, 
-        callback=interface.motorL.channel1Fall, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_1_SENSOR_1_GPIO, GPIO.RISING, 
-        callback=interface.motorL.channel1Rise, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_1_SENSOR_2_GPIO, GPIO.FALLING, 
-        callback=interface.motorL.channel2Fall, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_1_SENSOR_2_GPIO, GPIO.RISING, 
-        callback=interface.motorL.channel2Rise, bouncetime=10)
+    GPIO.add_event_detect(MOTOR_1_SENSOR_1_GPIO, GPIO.BOTH, 
+        callback=interface.motorL.switchChannel1, bouncetime=10)
+    GPIO.add_event_detect(MOTOR_1_SENSOR_2_GPIO, GPIO.BOTH, 
+        callback=interface.motorL.switchChannel2, bouncetime=10)
         
-    GPIO.add_event_detect(MOTOR_2_SENSOR_1_GPIO, GPIO.FALLING, 
-        callback=interface.motorR.channel1Fall, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_2_SENSOR_1_GPIO, GPIO.RISING, 
-        callback=interface.motorR.channel1Rise, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_2_SENSOR_2_GPIO, GPIO.FALLING, 
-        callback=interface.motorR.channel2Fall, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_2_SENSOR_2_GPIO, GPIO.RISING, 
-        callback=interface.motorR.channel2Rise, bouncetime=10
-    interface.motorL.printDirection()
+    GPIO.add_event_detect(MOTOR_2_SENSOR_1_GPIO, GPIO.BOTH, 
+        callback=interface.motorR.switchChannel1, bouncetime=10)
+    GPIO.add_event_detect(MOTOR_2_SENSOR_2_GPIO, GPIO.BOTH, 
+        callback=interface.motorR.switchChannel2, bouncetime=10)
     
-    for i in range(10):
-        interface.switchChannel1()
-        interface.motorL.printDirection()
-        interface.motorL.switchChannel2()
-        interface.motorL.printDirection()
-    for i in range(10):
-        interface.motorL.switchChannel2()
-        interface.motorL.printDirection()
-        interface.motorL.switchChannel1()
-        interface.motorL.printDirection()
+    interface.stopMoving();
+    while(True):
+        time.sleep(1000)
         
