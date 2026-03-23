@@ -61,12 +61,15 @@ class MotorInterface:
         else:
             print("Not Moving")
 
+
+
 class DeskInterface:
+    SERVO_CONTROL_GPIO = 23
     motorL = MotorInterface()
     motorR = MotorInterface()
     manualMode = True
     movementDirection = 0; # 1 -> up, 0 -> still, -1 -> down
-    
+    servoPWM = 0
     def button_trigger(self, channel):
         state = GPIO.input(channel)
         print("Trigger on channel " + str(channel))
@@ -120,7 +123,24 @@ class DeskInterface:
         else:
             GPIO.output(CONTROL_UP_GPIO, True)
             GPIO.output(CONTROL_DOWN_GPIO, True)
-        
+    # Position is in degrees, (-90, 90)        
+    def commandServo(self, position):
+        position = min(max(position, -90), 90)
+        position += 90
+        positionMultiplier = 1000/180
+        position *= positionMultiplier
+        position = (position/1000) + 1
+        position = max(min(position, 2), 1)/1000
+        print("Pulse length: " + str(position) + " s") 
+        for i in range(5):
+            GPIO.output(self.SERVO_CONTROL_GPIO, True)
+            now = time.time()
+            while(time.time() - now < position):
+                pass
+            GPIO.output(self.SERVO_CONTROL_GPIO, False)
+            while(time.time() - now < 0.02):
+                pass
+
 
 UP_GPIO = 1
 DOWN_GPIO = 17
@@ -134,8 +154,8 @@ CONTROL_UP_GPIO = 5
 CONTROL_DOWN_GPIO = 6
 
 if __name__ == "__main__":
-    interface = DeskInterface()
     GPIO.setmode(GPIO.BCM)
+    interface = DeskInterface()
     GPIO.setup(UP_GPIO, GPIO.IN)
     GPIO.setup(DOWN_GPIO, GPIO.IN)
     GPIO.setup(MODE_GPIO, GPIO.IN)
@@ -145,6 +165,7 @@ if __name__ == "__main__":
     GPIO.setup(MOTOR_2_SENSOR_2_GPIO, GPIO.IN)
     GPIO.setup(CONTROL_UP_GPIO, GPIO.OUT)
     GPIO.setup(CONTROL_DOWN_GPIO, GPIO.OUT)
+    GPIO.setup(interface.SERVO_CONTROL_GPIO, GPIO.OUT)
     
     GPIO.add_event_detect(UP_GPIO, GPIO.BOTH, 
         callback=interface.button_trigger, bouncetime=10)
@@ -166,6 +187,13 @@ if __name__ == "__main__":
         callback=interface.motorR.switchChannel2, bouncetime=10)
     
     interface.stopMoving();
+    
+    interface.commandServo(-90)
+    time.sleep(5)
+    interface.commandServo(0)
+    time.sleep(5)
+    interface.commandServo(90)
     while(True):
-        time.sleep(1000)
+        time.sleep(1)
+        
         
