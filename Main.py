@@ -70,6 +70,8 @@ class DeskInterface:
     manualMode = True
     movementDirection = 0; # 1 -> up, 0 -> still, -1 -> down
     servoPWM = 0
+    locked = False
+    safetyTripped = False
     def button_trigger(self, channel):
         state = GPIO.input(channel)
         print("Trigger on channel " + str(channel))
@@ -89,6 +91,10 @@ class DeskInterface:
             self.manualMode = not self.manualMode
             if(not self.manualMode):
                 self.stopMoving()
+        elif(channel == LOCK_GPIO):
+            self.locked = not self.locked
+        elif(channel == SAFE_GPIO):
+            self.safetyTripped = True
                 
     def button_released(self, channel):
         if(channel == UP_GPIO and self.manualMode and self.movementDirection == 1):
@@ -97,23 +103,27 @@ class DeskInterface:
             self.stopMoving()
         elif(channel == MODE_GPIO):
             pass
+        elif(channel == SAFE_GPIO):
+            self.safetyTripped = False
             
     def startMoveUp(self):
-        self.movementDirection = 1
-        if(len(sys.argv) == 1):
-            GPIO.output(CONTROL_UP_GPIO, True)
-            GPIO.output(CONTROL_DOWN_GPIO, False)
-        else: 
-            GPIO.output(CONTROL_UP_GPIO, False)
-            GPIO.output(CONTROL_DOWN_GPIO, True)
+        if(not self.locked):
+            self.movementDirection = 1
+            if(len(sys.argv) == 1):
+                GPIO.output(CONTROL_UP_GPIO, True)
+                GPIO.output(CONTROL_DOWN_GPIO, False)
+            else: 
+                GPIO.output(CONTROL_UP_GPIO, False)
+                GPIO.output(CONTROL_DOWN_GPIO, True)
     def startMoveDown(self):
-        self.movementDirection = -1
-        if(len(sys.argv) == 1):
-            GPIO.output(CONTROL_UP_GPIO, False)
-            GPIO.output(CONTROL_DOWN_GPIO, True)
-        else:
-            GPIO.output(CONTROL_UP_GPIO, True)
-            GPIO.output(CONTROL_DOWN_GPIO, False)
+        if(not (self.locked or self.safetyTripped)):
+            self.movementDirection = -1
+            if(len(sys.argv) == 1):
+                GPIO.output(CONTROL_UP_GPIO, False)
+                GPIO.output(CONTROL_DOWN_GPIO, True)
+            else:
+                GPIO.output(CONTROL_UP_GPIO, True)
+                GPIO.output(CONTROL_DOWN_GPIO, False)
         
     def stopMoving(self):
         self.movementDirection = 0
@@ -132,7 +142,7 @@ class DeskInterface:
         position = (position/1000) + 1
         position = max(min(position, 2), 1)/1000
         print("Pulse length: " + str(position) + " s") 
-        for i in range(5):
+        for i in range(100):
             GPIO.output(self.SERVO_CONTROL_GPIO, True)
             now = time.time()
             while(time.time() - now < position):
@@ -145,6 +155,8 @@ class DeskInterface:
 UP_GPIO = 1
 DOWN_GPIO = 17
 MODE_GPIO = 27
+LOCK_GPIO = 26
+SAFE_GPIO = 19
 MOTOR_1_SENSOR_1_GPIO = 10
 MOTOR_1_SENSOR_2_GPIO = 11
 MOTOR_2_SENSOR_1_GPIO = 12
@@ -159,6 +171,8 @@ if __name__ == "__main__":
     GPIO.setup(UP_GPIO, GPIO.IN)
     GPIO.setup(DOWN_GPIO, GPIO.IN)
     GPIO.setup(MODE_GPIO, GPIO.IN)
+    GPIO.setup(LOCK_GPIO, GPIO.IN)
+    GPIO.setup(SAFE_GPIO, GPIO.IN)
     GPIO.setup(MOTOR_1_SENSOR_1_GPIO, GPIO.IN)
     GPIO.setup(MOTOR_1_SENSOR_2_GPIO, GPIO.IN)
     GPIO.setup(MOTOR_2_SENSOR_1_GPIO, GPIO.IN)
@@ -174,6 +188,10 @@ if __name__ == "__main__":
         callback=interface.button_trigger, bouncetime=10)
     
     GPIO.add_event_detect(MODE_GPIO, GPIO.BOTH, 
+        callback=interface.button_trigger, bouncetime=10)
+    GPIO.add_event_detect(LOCK_GPIO, GPIO.BOTH, 
+        callback=interface.button_trigger, bouncetime=10)
+    GPIO.add_event_detect(SAFE_GPIO, GPIO.BOTH, 
         callback=interface.button_trigger, bouncetime=10)
         
     GPIO.add_event_detect(MOTOR_1_SENSOR_1_GPIO, GPIO.BOTH, 
