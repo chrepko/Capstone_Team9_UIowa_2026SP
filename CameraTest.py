@@ -11,8 +11,4 @@ def saveImage(request):
 cam.post_callback = saveImage
 cam.start()
 
-frame = cam.capture_array()
-cv2.circle(frame, (100,100), 10, (255,0,255), -1)
-cv2.imwrite('test2.jpg', frame)
-
 cam.stop()

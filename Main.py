@@ -1,6 +1,12 @@
 import RPi.GPIO as GPIO
 import time
 import sys 
+from picamera2 import Picamera2, MappedArray, Preview
+from picamera2.encoders import H264Encoder
+from picamera2.outputs import FfmpegOutput
+import cv2
+import time
+
 
 class MotorInterface:
     currentValues = [0, 0]
@@ -72,6 +78,13 @@ class DeskInterface:
     servoPWM = 0
     locked = False
     safetyTripped = False
+    angle = -20
+    lock_try = 0
+    lock_miss = 0
+    face_lock = [0,0,0,0]
+    leye_lock = [0,0,0,0]
+    reye_lock = [0,0,0,0]
+    directionUp = True;
     def button_trigger(self, channel):
         state = GPIO.input(channel)
         print("Trigger on channel " + str(channel))
@@ -150,6 +163,43 @@ class DeskInterface:
             GPIO.output(self.SERVO_CONTROL_GPIO, False)
             while(time.time() - now < 0.02):
                 pass
+    def Identify(self, request):
+        print("frame")
+        with MappedArray(request, "main") as m:
+            faces = face.detectMultiScale(m.array)
+            faceFound = False
+            for (x,y,w,h) in faces:
+                cv2.rectangle(m.array, (x,y), (x+w, y+h), (255, 0, 0), 2)
+                print("person detected")
+                faceFound = True
+                self.face_lock = [x,y,w,h]
+            reyes = reye.detectMultiScale(m.array)
+            for (ex,ey,ew,eh) in reyes:
+                cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,0,255), 2)
+                faceFound = True
+                self.reye_lock = [ex,ey,ew,eh]
+            leyes = leye.detectMultiScale(m.array)
+            for (ex,ey,ew,eh) in leyes:
+                cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,255,0), 2)
+                faceFound = True
+                self.reye_lock = [ex,ey,ew,eh]
+            if(not faceFound):
+                self.lock_miss += 1
+            if(self.lock_miss > 5):
+                if(self.directionUp):
+                    self.angle -= 20
+                    if(self.angle <= -80):
+                        self.angle = -80
+                        self.direction = not self.directionUp
+                    self.commandServo(self.angle)
+                else:
+                    self.angle += 20
+                    if(self.angle >= 80):
+                        self.angle = 80
+                        self.direction = not self.directionUp
+                    self.commandServo(self.angle)
+                self.lock_miss = 0
+                
 
 
 UP_GPIO = 1
@@ -205,12 +255,21 @@ if __name__ == "__main__":
         callback=interface.motorR.switchChannel2, bouncetime=10)
     
     interface.stopMoving();
+    interface.commandServo(interface.angle)
     
-    interface.commandServo(-90)
-    time.sleep(5)
-    interface.commandServo(0)
-    time.sleep(5)
-    interface.commandServo(90)
+    cam = Picamera2()
+    face = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_profileface.xml")
+    reye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_righteye_2splits.xml")
+    leye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_lefteye_2splits.xml")
+
+
+            
+    cam.pre_callback = interface.Identify
+    try:
+        cam.start_preview(Preview.QTGL)
+    except Exception:
+        pass
+    cam.start()
     while(True):
         time.sleep(1)
         
