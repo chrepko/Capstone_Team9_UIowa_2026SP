@@ -67,24 +67,34 @@ class MotorInterface:
         else:
             print("Not Moving")
 
+# Quick and dirty vector subtract
+def subtract(a, b):
+    return [c-d for c,d in zip(a,b)]
 
-
+def labs(a):
+    return [abs(x) for x in a]
+    
+def list_mult_scalar(l, s):
+    return [a*s for a in l]
+    
 class DeskInterface:
     SERVO_CONTROL_GPIO = 23
     motorL = MotorInterface()
     motorR = MotorInterface()
-    manualMode = True
+    manualMode = False
     movementDirection = 0; # 1 -> up, 0 -> still, -1 -> down
     servoPWM = 0
     locked = False
     safetyTripped = False
-    angle = -20
+    angle = 0
     lock_try = 0
     lock_miss = 0
     face_lock = [0,0,0,0]
     leye_lock = [0,0,0,0]
     reye_lock = [0,0,0,0]
+    face_locked = False
     directionUp = True;
+    setPreset = False
     def button_trigger(self, channel):
         state = GPIO.input(channel)
         print("Trigger on channel " + str(channel))
@@ -92,30 +102,49 @@ class DeskInterface:
             self.button_pressed(channel)
         else:
             self.button_released(channel)
+        self.setPresetState()
+        
+    def setPresetState(self):
+        if(self.manualMode):
+            GPIO.output(PRESET_EN_GPIO, True)
+        else:
+            GPIO.output(PRESET_EN_GPIO, False)
+            
             
     def button_pressed(self, channel):
-        print("manual mode: " + str(self.manualMode))
-        print("Movement direction: " + str(self.movementDirection))
+        print("Press on " + str(channel))
         if(channel == UP_GPIO and self.manualMode and self.movementDirection == 0):
             self.startMoveUp()
         elif(channel == DOWN_GPIO and self.manualMode and self.movementDirection == 0):
             self.startMoveDown()
         elif(channel == MODE_GPIO):
-            self.manualMode = not self.manualMode
-            if(not self.manualMode):
-                self.stopMoving()
+            pressed = time.time()
+            now = pressed
+            while(now - pressed < 1 and not GPIO.input(channel)):
+                now = time.time()
+            if(now - pressed >= 1):
+                print("Enabling Set Line")
+                GPIO.output(SET_GPIO, True);
+                self.setPreset = True
         elif(channel == LOCK_GPIO):
             self.locked = not self.locked
         elif(channel == SAFE_GPIO):
             self.safetyTripped = True
                 
     def button_released(self, channel):
+        print("Release on " + str(channel))
         if(channel == UP_GPIO and self.manualMode and self.movementDirection == 1):
             self.stopMoving()
         elif(channel == DOWN_GPIO and self.manualMode and self.movementDirection == -1):
             self.stopMoving()
         elif(channel == MODE_GPIO):
-            pass
+            if(not self.setPreset):
+                print("Toggling mode.")
+                self.manualMode = not self.manualMode
+                if(not self.manualMode):
+                    self.stopMoving()
+            self.setPreset = False
+            GPIO.output(SET_GPIO, False);
         elif(channel == SAFE_GPIO):
             self.safetyTripped = False
             
@@ -154,7 +183,6 @@ class DeskInterface:
         position *= positionMultiplier
         position = (position/1000) + 1
         position = max(min(position, 2), 1)/1000
-        print("Pulse length: " + str(position) + " s") 
         for i in range(100):
             GPIO.output(self.SERVO_CONTROL_GPIO, True)
             now = time.time()
@@ -164,41 +192,95 @@ class DeskInterface:
             while(time.time() - now < 0.02):
                 pass
     def Identify(self, request):
-        print("frame")
-        with MappedArray(request, "main") as m:
-            faces = face.detectMultiScale(m.array)
-            faceFound = False
-            for (x,y,w,h) in faces:
-                cv2.rectangle(m.array, (x,y), (x+w, y+h), (255, 0, 0), 2)
-                print("person detected")
-                faceFound = True
-                self.face_lock = [x,y,w,h]
-            reyes = reye.detectMultiScale(m.array)
-            for (ex,ey,ew,eh) in reyes:
-                cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,0,255), 2)
-                faceFound = True
-                self.reye_lock = [ex,ey,ew,eh]
-            leyes = leye.detectMultiScale(m.array)
-            for (ex,ey,ew,eh) in leyes:
-                cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,255,0), 2)
-                faceFound = True
-                self.reye_lock = [ex,ey,ew,eh]
-            if(not faceFound):
-                self.lock_miss += 1
-            if(self.lock_miss > 5):
-                if(self.directionUp):
-                    self.angle -= 20
-                    if(self.angle <= -80):
-                        self.angle = -80
-                        self.direction = not self.directionUp
-                    self.commandServo(self.angle)
+        if(not self.manualMode):
+            with MappedArray(request, "main") as m:
+                faces = face.detectMultiScale(m.array)
+                faceFound = False
+                face_lock = [0,0,0,0]
+                reye_lock = [0,0,0,0]
+                leye_lock = [0,0,0,0]
+                for (x,y,w,h) in faces:
+                    cv2.rectangle(m.array, (x,y), (x+w, y+h), (255, 0, 0), 2)
+                    print("person detected")
+                    faceFound = True
+                    face_lock = [x,y,w,h]
+                reyes = reye.detectMultiScale(m.array)
+                for (ex,ey,ew,eh) in reyes:
+                    cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,0,255), 2)
+                    faceFound = True
+                    reye_lock = [ex,ey,ew,eh]
+                leyes = leye.detectMultiScale(m.array)
+                for (ex,ey,ew,eh) in leyes:
+                    cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,255,0), 2)
+                    faceFound = True
+                    leye_lock = [ex,ey,ew,eh]
+                if(not faceFound):
+                    self.lock_miss += 1
+                    self.lock_try = 0
+                    self.face_locked = False
                 else:
-                    self.angle += 20
-                    if(self.angle >= 80):
-                        self.angle = 80
-                        self.direction = not self.directionUp
-                    self.commandServo(self.angle)
-                self.lock_miss = 0
+                    foundOne = False
+                    if(labs(subtract(self.face_lock, face_lock)) <= list_mult_scalar(self.face_lock, 0.1) and face_lock != [0,0,0,0]):
+                        self.lock_miss = 0
+                        print("Stable face")
+                        foundOne = True
+                        self.lock_try += 1
+                        self.face_lock = face_lock
+                    elif(self.lock_miss > 2):
+                        self.face_lock = [0,0,0,0]
+                    if(labs(subtract(self.leye_lock, leye_lock)) <= list_mult_scalar(self.leye_lock, 0.1) and leye_lock != [0,0,0,0]):
+                        self.lock_miss = 0
+                        print("Stable leye")
+                        foundOne = True
+                        self.leye_lock = leye_lock
+                    elif(self.lock_miss > 2):
+                        self.leye_lock = [0,0,0,0]
+                    if(labs(subtract(self.reye_lock, reye_lock)) <= list_mult_scalar(self.reye_lock, 0.1) and reye_lock != [0,0,0,0]):
+                        self.lock_miss = 0
+                        print("Stable reye")
+                        foundOne = True
+                        self.reye_lock = reye_lock
+                    elif(self.lock_miss > 2):
+                        self.reye_lock = [0,0,0,0]
+                    
+                    if(face_lock == [0,0,0,0] or self.face_lock == [0,0,0,0] and face_lock != [0,0,0,0]):
+                        self.face_lock = face_lock
+                    if(leye_lock == [0,0,0,0] or self.leye_lock == [0,0,0,0] and leye_lock != [0,0,0,0]):
+                        self.leye_lock = leye_lock
+                    if(reye_lock == [0,0,0,0] or self.reye_lock == [0,0,0,0] and reye_lock != [0,0,0,0]):
+                        self.reye_lock = reye_lock
+                        
+                    if(not foundOne):
+                        self.lock_miss += 1
+                    else:
+                        self.lock_try += 1
+                if(self.lock_miss > 5):
+                    if(self.directionUp):
+                        self.angle -= 20
+                        print("Go Up")
+                        if(self.angle <= -80):
+                            self.angle = -80
+                            self.directionUp = not self.directionUp
+                        #self.commandServo(self.angle)
+                    else:
+                        self.angle += 20
+                        print("Go Down")
+                        if(self.angle >= 80):
+                            self.angle = 80
+                            self.directionUp = not self.directionUp
+                        #self.commandServo(self.angle)
+                    self.lock_miss = 0
+                if(self.lock_try > 4):
+                    self.face_locked = True
+                if(self.face_locked):
+                    print("Hooray, we have a lock")
+                    print(self.face_lock)
+                    print(self.reye_lock)
+                    print(self.leye_lock)
+                    if(self.reye_lock[1] > 121 * 1.1):
+                        print("Go up")
+                    elif(self.reye_lock[1] < 121 * 0.9):
+                        print("Go down")
                 
 
 
@@ -207,6 +289,8 @@ DOWN_GPIO = 17
 MODE_GPIO = 27
 LOCK_GPIO = 26
 SAFE_GPIO = 19
+SET_GPIO = 24
+PRESET_EN_GPIO = 25
 MOTOR_1_SENSOR_1_GPIO = 10
 MOTOR_1_SENSOR_2_GPIO = 11
 MOTOR_2_SENSOR_1_GPIO = 12
@@ -223,6 +307,8 @@ if __name__ == "__main__":
     GPIO.setup(MODE_GPIO, GPIO.IN)
     GPIO.setup(LOCK_GPIO, GPIO.IN)
     GPIO.setup(SAFE_GPIO, GPIO.IN)
+    GPIO.setup(SET_GPIO, GPIO.OUT)
+    GPIO.setup(PRESET_EN_GPIO, GPIO.OUT)
     GPIO.setup(MOTOR_1_SENSOR_1_GPIO, GPIO.IN)
     GPIO.setup(MOTOR_1_SENSOR_2_GPIO, GPIO.IN)
     GPIO.setup(MOTOR_2_SENSOR_1_GPIO, GPIO.IN)
@@ -265,10 +351,7 @@ if __name__ == "__main__":
 
             
     cam.pre_callback = interface.Identify
-    try:
-        cam.start_preview(Preview.QTGL)
-    except Exception:
-        pass
+    cam.start_preview(Preview.QTGL)
     cam.start()
     while(True):
         time.sleep(1)
