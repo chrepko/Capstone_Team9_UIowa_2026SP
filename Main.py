@@ -4,6 +4,7 @@ import sys
 from picamera2 import Picamera2, MappedArray, Preview
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import FfmpegOutput
+from libcamera import controls
 import cv2
 import time
 
@@ -87,6 +88,9 @@ class DeskInterface:
     locked = False
     safetyTripped = False
     angle = 0
+    seatedAngle = -10
+    seatedToStandAngle = -70
+    standToSeatedAngle = 60
     lock_try = 0
     lock_miss = 0
     face_lock = [0,0,0,0]
@@ -178,6 +182,7 @@ class DeskInterface:
     # Position is in degrees, (-90, 90)        
     def commandServo(self, position):
         position = min(max(position, -90), 90)
+        self.angle = position;
         position += 90
         positionMultiplier = 1000/180
         position *= positionMultiplier
@@ -254,22 +259,23 @@ class DeskInterface:
                         self.lock_miss += 1
                     else:
                         self.lock_try += 1
-                if(self.lock_miss > 5):
+                if(self.lock_miss > 20):
                     if(self.directionUp):
-                        self.angle -= 20
-                        print("Go Up")
-                        if(self.angle <= -80):
-                            self.angle = -80
+                        if(self.angle == self.seatedAngle):
+                            self.commandServo(self.seatedToStandAngle)
                             self.directionUp = not self.directionUp
-                        #self.commandServo(self.angle)
+                        else:
+                            self.commandServo(self.seatedAngle)
                     else:
-                        self.angle += 20
                         print("Go Down")
-                        if(self.angle >= 80):
-                            self.angle = 80
+                        if(self.angle == self.seatedToStandAngle):
+                            self.commandServo(self.seatedAngle)
+                        else:
+                            self.commandServo(self.standToSeatedAngle)
                             self.directionUp = not self.directionUp
-                        #self.commandServo(self.angle)
                     self.lock_miss = 0
+                elif(self.lock_miss > 5):
+                        self.stopMoving()
                 if(self.lock_try > 4):
                     self.face_locked = True
                 if(self.face_locked):
@@ -277,10 +283,26 @@ class DeskInterface:
                     print(self.face_lock)
                     print(self.reye_lock)
                     print(self.leye_lock)
-                    if(self.reye_lock[1] > 121 * 1.1):
-                        print("Go up")
-                    elif(self.reye_lock[1] < 121 * 0.9):
-                        print("Go down")
+                    if(self.angle == self.seatedAngle):
+                        print("Height discriminator: " + str(self.reye_lock[1]))
+                        if(self.reye_lock[1] > 250):
+                            print("Go Down")
+                            self.startMoveDown()
+                        elif(self.reye_lock[1] < 100):
+                            print("Go Up")
+                            self.startMoveUp()
+                        else:
+                            print("Don't move")
+                            self.stopMoving()
+                    elif(self.angle == self.seatedToStandAngle):
+                        print("Go to standing")
+                        self.startMoveUp()
+                    elif(self.angle == self.standToSeatedAngle):
+                        print("Go to sit")
+                        self.startMoveDown()
+                    else:
+                        print("Stop moving")
+                        self.stopMoving()
                 
 
 
@@ -341,7 +363,7 @@ if __name__ == "__main__":
         callback=interface.motorR.switchChannel2, bouncetime=10)
     
     interface.stopMoving();
-    interface.commandServo(interface.angle)
+    interface.commandServo(interface.seatedAngle)
     
     cam = Picamera2()
     face = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_profileface.xml")
@@ -349,9 +371,9 @@ if __name__ == "__main__":
     leye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_lefteye_2splits.xml")
 
 
-            
+    cam.set_controls({"AeEnable": False})
     cam.pre_callback = interface.Identify
-    cam.start_preview(Preview.QTGL)
+    cam.start_preview(Preview.QTGL) # QTGL if running on monitor
     cam.start()
     while(True):
         time.sleep(1)
