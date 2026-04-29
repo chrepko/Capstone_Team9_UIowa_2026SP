@@ -88,9 +88,9 @@ class DeskInterface:
     locked = False
     safetyTripped = False
     angle = 0
-    seatedAngle = -10
+    seatedAngle = -30
     seatedToStandAngle = -70
-    standToSeatedAngle = 60
+    standToSeatedAngle = 50
     lock_try = 0
     lock_miss = 0
     face_lock = [0,0,0,0]
@@ -99,6 +99,7 @@ class DeskInterface:
     face_locked = False
     directionUp = True;
     setPreset = False
+    isMoving = False
     def button_trigger(self, channel):
         state = GPIO.input(channel)
         print("Trigger on channel " + str(channel))
@@ -145,6 +146,9 @@ class DeskInterface:
             if(not self.setPreset):
                 print("Toggling mode.")
                 self.manualMode = not self.manualMode
+                self.isMoving = False
+                self.lock_try = 0
+                self.lock_miss = 0
                 if(not self.manualMode):
                     self.stopMoving()
             self.setPreset = False
@@ -199,26 +203,26 @@ class DeskInterface:
     def Identify(self, request):
         if(not self.manualMode):
             with MappedArray(request, "main") as m:
-                faces = face.detectMultiScale(m.array)
+                # faces = face.detectMultiScale(m.array)
                 faceFound = False
                 face_lock = [0,0,0,0]
                 reye_lock = [0,0,0,0]
                 leye_lock = [0,0,0,0]
-                for (x,y,w,h) in faces:
-                    cv2.rectangle(m.array, (x,y), (x+w, y+h), (255, 0, 0), 2)
-                    print("person detected")
-                    faceFound = True
-                    face_lock = [x,y,w,h]
+                # for (x,y,w,h) in faces:
+                    # cv2.rectangle(m.array, (x,y), (x+w, y+h), (255, 0, 0), 2)
+                    # print("person detected")
+                    # faceFound = True
+                    # face_lock = [x,y,w,h]
                 reyes = reye.detectMultiScale(m.array)
                 for (ex,ey,ew,eh) in reyes:
                     cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,0,255), 2)
                     faceFound = True
                     reye_lock = [ex,ey,ew,eh]
-                leyes = leye.detectMultiScale(m.array)
-                for (ex,ey,ew,eh) in leyes:
-                    cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,255,0), 2)
-                    faceFound = True
-                    leye_lock = [ex,ey,ew,eh]
+                #leyes = leye.detectMultiScale(m.array)
+                # for (ex,ey,ew,eh) in leyes:
+                    # cv2.rectangle(m.array, (ex,ey),(ex+ew,ey+eh), (0,255,0), 2)
+                    # faceFound = True
+                    # leye_lock = [ex,ey,ew,eh]
                 if(not faceFound):
                     self.lock_miss += 1
                     self.lock_try = 0
@@ -259,7 +263,7 @@ class DeskInterface:
                         self.lock_miss += 1
                     else:
                         self.lock_try += 1
-                if(self.lock_miss > 20):
+                if(self.lock_miss > 20 and not self.isMoving):
                     if(self.directionUp):
                         if(self.angle == self.seatedAngle):
                             self.commandServo(self.seatedToStandAngle)
@@ -274,11 +278,15 @@ class DeskInterface:
                             self.commandServo(self.standToSeatedAngle)
                             self.directionUp = not self.directionUp
                     self.lock_miss = 0
-                elif(self.lock_miss > 5):
-                        self.stopMoving()
-                if(self.lock_try > 4):
+                elif(self.lock_miss > 5 and not self.isMoving):
+                    self.stopMoving()
+                elif(self.lock_miss > 400 and self.isMoving):
+                    self.stopMoving()
+                    self.isMoving = False
+                if(self.lock_try > 20):
                     self.face_locked = True
                 if(self.face_locked):
+                        
                     print("Hooray, we have a lock")
                     print(self.face_lock)
                     print(self.reye_lock)
@@ -287,22 +295,33 @@ class DeskInterface:
                         print("Height discriminator: " + str(self.reye_lock[1]))
                         if(self.reye_lock[1] > 250):
                             print("Go Down")
-                            self.startMoveDown()
+                            self.startMoveUp()
+                            self.commandServo(self.seatedAngle)
                         elif(self.reye_lock[1] < 100):
                             print("Go Up")
-                            self.startMoveUp()
+                            self.startMoveDown()
                         else:
                             print("Don't move")
                             self.stopMoving()
+                            self.isMoving = False
                     elif(self.angle == self.seatedToStandAngle):
                         print("Go to standing")
-                        self.startMoveUp()
+                        self.startMoveDown()
+                        self.commandServo(self.seatedAngle)
+                        self.isMoving = True
+                        self.face_locked = False
+                        self.lock_try = 0
                     elif(self.angle == self.standToSeatedAngle):
                         print("Go to sit")
-                        self.startMoveDown()
+                        self.startMoveUp()
+                        self.commandServo(self.seatedAngle)
+                        self.isMoving = True
+                        self.face_locked = False
+                        self.lock_try = 0
                     else:
                         print("Stop moving")
                         self.stopMoving()
+                        self.isMoving = False
                 
 
 
@@ -366,6 +385,7 @@ if __name__ == "__main__":
     interface.commandServo(interface.seatedAngle)
     
     cam = Picamera2()
+    cam.video_configuration.controls.FrameRate = 5.0
     face = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_profileface.xml")
     reye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_righteye_2splits.xml")
     leye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_lefteye_2splits.xml")
