@@ -1,0 +1,8 @@
+[Unit]
+Description=Library Scanner Service
+
+[Service]
+ExecStart=/usr/bin/env python /usr/local/Main.py
+
+[Install]
+WantedBy=multi-user.target

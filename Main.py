@@ -82,13 +82,13 @@ class DeskInterface:
     SERVO_CONTROL_GPIO = 23
     motorL = MotorInterface()
     motorR = MotorInterface()
-    manualMode = False
+    manualMode = True
     movementDirection = 0; # 1 -> up, 0 -> still, -1 -> down
     servoPWM = 0
     locked = False
     safetyTripped = False
     angle = 0
-    seatedAngle = -30
+    seatedAngle = -10
     seatedToStandAngle = -70
     standToSeatedAngle = 50
     lock_try = 0
@@ -393,7 +393,7 @@ if __name__ == "__main__":
 
     cam.set_controls({"AeEnable": False})
     cam.pre_callback = interface.Identify
-    cam.start_preview(Preview.QTGL) # QTGL if running on monitor
+    #cam.start_preview(Preview.QTGL) # QTGL if running on monitor
     cam.start()
     while(True):
         time.sleep(1)
