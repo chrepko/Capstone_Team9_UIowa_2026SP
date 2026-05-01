@@ -133,6 +133,8 @@ class DeskInterface:
                 self.setPreset = True
         elif(channel == LOCK_GPIO):
             self.locked = not self.locked
+            GPIO.output(LED_AUTO_GPIO, self.locked or not self.manualMode)
+            GPIO.output(LED_MANUAL_GPIO, self.locked or self.manualMode)
         elif(channel == SAFE_GPIO):
             self.safetyTripped = True
                 
@@ -146,6 +148,8 @@ class DeskInterface:
             if(not self.setPreset):
                 print("Toggling mode.")
                 self.manualMode = not self.manualMode
+                GPIO.output(LED_AUTO_GPIO, self.locked or not self.manualMode)
+                GPIO.output(LED_MANUAL_GPIO, self.locked or self.manualMode)
                 self.isMoving = False
                 self.lock_try = 0
                 self.lock_miss = 0
@@ -332,10 +336,8 @@ LOCK_GPIO = 26
 SAFE_GPIO = 19
 SET_GPIO = 24
 PRESET_EN_GPIO = 25
-MOTOR_1_SENSOR_1_GPIO = 10
-MOTOR_1_SENSOR_2_GPIO = 11
-MOTOR_2_SENSOR_1_GPIO = 12
-MOTOR_2_SENSOR_2_GPIO = 13
+LED_AUTO_GPIO = 11
+LED_MANUAL_GPIO = 12
 
 CONTROL_UP_GPIO = 5
 CONTROL_DOWN_GPIO = 6
@@ -350,13 +352,16 @@ if __name__ == "__main__":
     GPIO.setup(SAFE_GPIO, GPIO.IN)
     GPIO.setup(SET_GPIO, GPIO.OUT)
     GPIO.setup(PRESET_EN_GPIO, GPIO.OUT)
-    GPIO.setup(MOTOR_1_SENSOR_1_GPIO, GPIO.IN)
-    GPIO.setup(MOTOR_1_SENSOR_2_GPIO, GPIO.IN)
-    GPIO.setup(MOTOR_2_SENSOR_1_GPIO, GPIO.IN)
-    GPIO.setup(MOTOR_2_SENSOR_2_GPIO, GPIO.IN)
+    GPIO.setup(LED_AUTO_GPIO, GPIO.OUT)
+    GPIO.setup(LED_MANUAL_GPIO, GPIO.OUT)
     GPIO.setup(CONTROL_UP_GPIO, GPIO.OUT)
     GPIO.setup(CONTROL_DOWN_GPIO, GPIO.OUT)
     GPIO.setup(interface.SERVO_CONTROL_GPIO, GPIO.OUT)
+    
+    
+    GPIO.output(LED_AUTO_GPIO, not interface.manualMode)
+    GPIO.output(LED_MANUAL_GPIO, interface.manualMode)
+    GPIO.output(PRESET_EN_GPIO, interface.manualMode)
     
     GPIO.add_event_detect(UP_GPIO, GPIO.BOTH, 
         callback=interface.button_trigger, bouncetime=10)
@@ -370,16 +375,6 @@ if __name__ == "__main__":
         callback=interface.button_trigger, bouncetime=10)
     GPIO.add_event_detect(SAFE_GPIO, GPIO.BOTH, 
         callback=interface.button_trigger, bouncetime=10)
-        
-    GPIO.add_event_detect(MOTOR_1_SENSOR_1_GPIO, GPIO.BOTH, 
-        callback=interface.motorL.switchChannel1, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_1_SENSOR_2_GPIO, GPIO.BOTH, 
-        callback=interface.motorL.switchChannel2, bouncetime=10)
-        
-    GPIO.add_event_detect(MOTOR_2_SENSOR_1_GPIO, GPIO.BOTH, 
-        callback=interface.motorR.switchChannel1, bouncetime=10)
-    GPIO.add_event_detect(MOTOR_2_SENSOR_2_GPIO, GPIO.BOTH, 
-        callback=interface.motorR.switchChannel2, bouncetime=10)
     
     interface.stopMoving();
     interface.commandServo(interface.seatedAngle)
