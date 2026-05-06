@@ -90,7 +90,7 @@ class DeskInterface:
     angle = 0
     seatedAngle = -10
     seatedToStandAngle = -70
-    standToSeatedAngle = 50
+    standToSeatedAngle = 70
     lock_try = 0
     lock_miss = 0
     face_lock = [0,0,0,0]
@@ -207,6 +207,7 @@ class DeskInterface:
     def Identify(self, request):
         if(not self.manualMode):
             with MappedArray(request, "main") as m:
+                print("frame")
                 # faces = face.detectMultiScale(m.array)
                 faceFound = False
                 face_lock = [0,0,0,0]
@@ -287,7 +288,7 @@ class DeskInterface:
                 elif(self.lock_miss > 400 and self.isMoving):
                     self.stopMoving()
                     self.isMoving = False
-                if(self.lock_try > 20):
+                if(self.lock_try > 10 or self.isMoving and self.lock_try > 1):
                     self.face_locked = True
                 if(self.face_locked):
                         
@@ -298,9 +299,8 @@ class DeskInterface:
                     if(self.angle == self.seatedAngle):
                         print("Height discriminator: " + str(self.reye_lock[1]))
                         if(self.reye_lock[1] > 250):
-                            print("Go Down")
                             self.startMoveUp()
-                            self.commandServo(self.seatedAngle)
+                            print("Go Down")
                         elif(self.reye_lock[1] < 100):
                             print("Go Up")
                             self.startMoveDown()
@@ -315,6 +315,7 @@ class DeskInterface:
                         self.isMoving = True
                         self.face_locked = False
                         self.lock_try = 0
+                        self.lock_miss = 0
                     elif(self.angle == self.standToSeatedAngle):
                         print("Go to sit")
                         self.startMoveUp()
@@ -322,6 +323,7 @@ class DeskInterface:
                         self.isMoving = True
                         self.face_locked = False
                         self.lock_try = 0
+                        self.lock_miss = 0
                     else:
                         print("Stop moving")
                         self.stopMoving()
@@ -381,9 +383,9 @@ if __name__ == "__main__":
     
     cam = Picamera2()
     cam.video_configuration.controls.FrameRate = 5.0
-    face = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_profileface.xml")
+    #face = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_profileface.xml")
     reye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_righteye_2splits.xml")
-    leye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_lefteye_2splits.xml")
+    #eye = cv2.CascadeClassifier("/home/team9/Capstone/opencv-4.12.0/data/haarcascades/haarcascade_lefteye_2splits.xml")
 
 
     cam.set_controls({"AeEnable": False})
