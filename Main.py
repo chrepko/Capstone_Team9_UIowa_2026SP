@@ -88,7 +88,7 @@ class DeskInterface:
     locked = False
     safetyTripped = False
     angle = 0
-    seatedAngle = -10
+    seatedAngle = -20
     seatedToStandAngle = -70
     standToSeatedAngle = 70
     lock_try = 0
@@ -136,7 +136,7 @@ class DeskInterface:
             GPIO.output(LED_AUTO_GPIO, self.locked or not self.manualMode)
             GPIO.output(LED_MANUAL_GPIO, self.locked or self.manualMode)
         elif(channel == SAFE_GPIO):
-            self.safetyTripped = True
+            self.safetyTripped = False
                 
     def button_released(self, channel):
         print("Release on " + str(channel))
@@ -331,18 +331,18 @@ class DeskInterface:
                 
 
 
-UP_GPIO = 1
+UP_GPIO = 2
 DOWN_GPIO = 17
 MODE_GPIO = 27
 LOCK_GPIO = 26
 SAFE_GPIO = 19
 SET_GPIO = 24
 PRESET_EN_GPIO = 25
-LED_AUTO_GPIO = 11
-LED_MANUAL_GPIO = 12
+LED_AUTO_GPIO = 12
+LED_MANUAL_GPIO = 11
 
 CONTROL_UP_GPIO = 5
-CONTROL_DOWN_GPIO = 6
+CONTROL_DOWN_GPIO = 13
 
 if __name__ == "__main__":
     GPIO.setmode(GPIO.BCM)
@@ -390,7 +390,7 @@ if __name__ == "__main__":
 
     cam.set_controls({"AeEnable": False})
     cam.pre_callback = interface.Identify
-    #cam.start_preview(Preview.QTGL) # QTGL if running on monitor
+    cam.start_preview(Preview.QTGL) # QTGL if running on monitor
     cam.start()
     while(True):
         time.sleep(1)
